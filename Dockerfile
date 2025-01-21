@@ -21,8 +21,9 @@ WORKDIR /app
 # Copy the source code into the container.
 COPY . .
 
+RUN    python -m pip install --upgrade pip
 RUN    python -m pip install -r requirements.txt
-RUN    python -m pip install -r torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+RUN    python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
 # Expose the port that the application listens on.
 EXPOSE 8080
