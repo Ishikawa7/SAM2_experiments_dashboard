@@ -7,7 +7,7 @@
 # Want to help us make this template better? Share your feedback here: https://forms.gle/ybq9Krt8jtBL3iCk7
 
 ARG PYTHON_VERSION=3.12.3
-FROM python:${PYTHON_VERSION}-slim as base
+FROM python:${PYTHON_VERSION}-slim AS base
 
 # Prevents Python from writing pyc files.
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -21,14 +21,12 @@ WORKDIR /app
 # Copy the source code into the container.
 COPY . .
 
-RUN    python -m pip install --upgrade pip
-RUN    python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-RUN    python -m pip install -r requirements.txt
-
-RUN    python -c "import torch; print(torch.__version__)"
+RUN    python3 -m pip install --upgrade pip
+RUN    python3 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+RUN    python3 -m pip install -r requirements.txt
 
 # Expose the port that the application listens on.
 EXPOSE 8080
 
 # Run the application.
-CMD python3 app.py
+CMD ["python3", "app.py"]
