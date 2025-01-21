@@ -61,24 +61,35 @@ def create_app_layout():
                                         dbc.Row(
                                             [
                                                 dbc.Col(
-                                                    dcc.Graph(figure=px.scatter(template="plotly_white"), id="target-mask"),
+                                                    dbc.Container(
+                                                        dcc.Graph(figure=px.scatter(template="plotly_white",height=400, width=400), id="target-mask"),
+                                                        style={'justify-content': 'center', 'align-items': 'center', 'display': 'flex'},
+                                                    ),
                                                     width=4,
+                                                    style={'justify-content': 'center', 'align-items': 'center', 'display': 'flex'},
                                                 ),
                                                 dbc.Col(
-                                                    dcc.Graph(figure=px.scatter(template="plotly_white"), id="original-image"),
+                                                    dbc.Container(
+                                                        dcc.Graph(figure=px.scatter(template="plotly_white",height=400, width=400), id="original-image"),
+                                                        style={'justify-content': 'center', 'align-items': 'center', 'display': 'flex'},
+                                                    ),
                                                     width=4,
+                                                    style={'justify-content': 'center', 'align-items': 'center', 'display': 'flex'},
                                                 ),
                                                 dbc.Col(
                                                     dbc.Container(
                                                         [
-                                                            dcc.Graph(figure=px.scatter(template="plotly_white")),
+                                                            dcc.Graph(figure=px.scatter(template="plotly_white",height=400, width=400)),
                                                         ],
                                                         id = "output-mask-container",
-                                                        style={'justify-content': 'center', 'align-items': 'center'},
+                                                        style={'justify-content': 'center', 'align-items': 'center', 'display': 'flex'},
                                                     ),
                                                     width=4,
+                                                    style={'justify-content': 'center', 'align-items': 'center', 'display': 'flex'},
                                                 ),
-                                            ]
+                                            ],
+                                            # space between the columns 0
+                                            style={"margin": "0"},
                                         ),                                       
                                     ]
                                 ),
@@ -100,6 +111,8 @@ layout = create_app_layout
     Output("original-image", "figure"),
     Output("target-mask", "figure"),
     Output("input-name", "value"),
+    Output("original-image", "relayoutData", allow_duplicate=True),
+    Output("output-mask-container", "children", allow_duplicate=True),
     Input("input-name", "value"),
     Input("random-image-button", "n_clicks"),
     Input("radioitems-input-drawmode", "value"),
@@ -113,16 +126,21 @@ def display_image(input_name, n_clicks, drawmode):
         button_id = ctx.triggered[0]["prop_id"].split(".")[0]
         if button_id == "random-image-button":
             input_name = random.choice(images_names)
+        elif input_name not in images_names:
+            raise dash.exceptions.PreventUpdate
         img = Image.open(f"data/Kvasir-SEG-processed/train/images/{input_name}.jpg")
         mask = Image.open(f"data/Kvasir-SEG-processed/train/masks/{input_name}.jpg")
         img = Image.open(f"data/Kvasir-SEG-processed/train/images/{input_name}.jpg")
         mask = Image.open(f"data/Kvasir-SEG-processed/train/masks/{input_name}.jpg")
         fig_original = px.imshow(img)
-        fig_original.update_layout( dragmode=drawmode, newshape=dict(line_color='cyan'), title="Original image")
+        fig_original.update_layout( dragmode=drawmode, newshape=dict(line_color='cyan'), title="Original image",title_x=0.5)
+        # remove margins
+        fig_original.update_layout(height=400, width=400)#, margin=dict(l=0, r=0, b=0, t=0))
         fig_target = px.imshow(mask)
-        fig_target.update_layout(coloraxis_showscale=False, title="Target")
+        fig_target.update_layout(coloraxis_showscale=False, title="Target",title_x=0.5)
+        fig_target.update_layout(height=400, width=400)#, margin=dict(l=0, r=0, b=0, t=0))
         # display option drawclosedpath, drawrect, drawline in the fig_original
-        return fig_original, fig_target, input_name #.show(config={'modeBarButtonsToAdd':['drawclosedpath','drawrect','eraseshape']})
+        return fig_original, fig_target, input_name, None, dcc.Graph(figure=px.scatter(template="plotly_white",height=400, width=400)) #.show(config={'modeBarButtonsToAdd':['drawclosedpath','drawrect','eraseshape']})
     
 # create a callback that set up a spinner while the model is predicting
 @callback(
@@ -137,23 +155,27 @@ def set_spinner(n_clicks, relayoutData):
         raise dash.exceptions.PreventUpdate
     else:
         # check if relayoutData has key 'shapes'
-        if "shapes" not in relayoutData:
+        if relayoutData is None or "shapes" not in relayoutData:
             return [dbc.Alert("Please select an area", color="warning")]
         return [dbc.Spinner(color="primary", type="grow", size="lg")]
 
 # create callback that get the selected area and display it in the selection graph
 @callback(
     Output("output-mask-container", "children", allow_duplicate=True),
+    Output("original-image", "relayoutData", allow_duplicate=True),
     Input("output-mask-container", "children"),
     State("original-image", "relayoutData"),
     State("input-name", "value"),
+    State("output-mask-container", "children"),
     prevent_initial_call=True,
 )
-def display_selection(n_clicks, relayoutData, image_name):
+def display_selection(n_clicks, relayoutData, image_name, actual_children):
     ctx = dash.callback_context
-    if not ctx.triggered:
+    if not ctx.triggered  or image_name not in images_names or relayoutData is None or "shapes" not in relayoutData:
         raise dash.exceptions.PreventUpdate
     else:
+        if actual_children == [] or actual_children == None:
+            return [dcc.Graph(figure=px.scatter(template="plotly_white",height=400, width=400))], None
         x0 = int(relayoutData['shapes'][-1]["x0"])
         x1 = int(relayoutData['shapes'][-1]["x1"])
         y0 = int(relayoutData['shapes'][-1]["y0"])
@@ -166,5 +188,6 @@ def display_selection(n_clicks, relayoutData, image_name):
         predicted_mask, _, _ = image_predictor.predict(box=box, multimask_output=False)
         fig = px.imshow(predicted_mask[0])
         # hide the colorbar
-        fig.update_layout(coloraxis_showscale=False, title="Predicted")
-        return [dcc.Graph(figure=fig)]
+        fig.update_layout(coloraxis_showscale=False, title="Predicted",title_x=0.5)
+        fig.update_layout(height=400, width=400)
+        return [dcc.Graph(figure=fig)], None

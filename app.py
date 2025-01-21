@@ -43,7 +43,7 @@ def create_app_layout():
                     #html.Div(style={'display': 'inline-block', 'width': '95px'}),
                     #html.Img(src='/static/logo/vrm4.jpg', height="40px"),
                 ],
-                brand="SAM2 manual tests and experiments v0.0.1",
+                brand="SAM2 manual tests and experiments [v0.0.1]",
                 brand_href="/",
                 color="primary",
                 dark=True,
@@ -69,8 +69,8 @@ if __name__ == "__main__":
     #os.system("taskkill /f /im python.exe")
     
     # start the dash app
-    #app.run_server(host='0.0.0.0', port=8080, debug=False, use_reloader=False) # for production
-    app.run_server(debug=True, use_reloader=True, port=8080) # for development
+    app.run_server(host='0.0.0.0', port=8080, debug=False, use_reloader=False) # for production
+    #app.run_server(debug=True, use_reloader=True, port=8080) # for development
     
 
 # if Python [Errno 98] Address already in use: "kill -9 $(ps -A | grep python | awk '{print $1}')"
