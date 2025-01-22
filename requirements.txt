@@ -11,3 +11,5 @@ pytest==8.3.4
 tornado==6.4.2
 tqdm==4.67.1
 samv2==0.0.4
+opencv-python==4.11.0.86
+svg.path==6.3

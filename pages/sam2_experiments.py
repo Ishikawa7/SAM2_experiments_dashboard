@@ -3,7 +3,7 @@ from dash import Dash, Input, Output, State, callback, html, dcc, dash_table
 import dash_bootstrap_components as dbc
 import plotly.express as px
 
-from PIL import Image
+from PIL import Image, ImageDraw
 import random
 import glob
 
@@ -12,12 +12,40 @@ from sam2.build_sam import build_sam2
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 from sam2.utils.misc import variant_to_config_mapping
 
+import cv2
+from svg.path import parse_path
+
 import numpy as np
 
 dash.register_page(
     __name__,
     path='/',
     )
+
+def svg_path_to_mask(path_data, width, height):
+    # Create a blank image with a white background
+    img = Image.new('L', (width, height), 0)
+    draw = ImageDraw.Draw(img)
+    
+    # Parse the path
+    parsed_path = parse_path(path_data)
+    
+    # Extract path points
+    points = []
+    for segment in parsed_path:
+        if hasattr(segment, 'point'):
+            start = segment.start
+            end = segment.end
+            points.append((start.real, start.imag))
+            points.append((end.real, end.imag))
+    
+    # Draw the polygon on the image
+    draw.polygon(points, fill=1, outline=1)
+    
+    # Convert the image to a NumPy array
+    mask = np.array(img)
+    return mask
+
 # load SAM2 model (CPU version)
 model = build_sam2(
     variant_to_config_mapping["tiny"],
@@ -46,7 +74,7 @@ def create_app_layout():
                                             options=[
                                                 {"label": "points", "value":"points", "disabled": True},
                                                 {"label": "drawrect", "value": "drawrect"},
-                                                {"label": "drawclosedpath", "value": "drawclosedpath", "disabled": True},
+                                                {"label": "drawclosedpath", "value": "drawclosedpath"},
                                             ],
                                             value='drawrect',
                                             id="radioitems-input-drawmode",
@@ -133,12 +161,10 @@ def display_image(input_name, n_clicks, drawmode):
         img = Image.open(f"data/Kvasir-SEG-processed/train/images/{input_name}.jpg")
         mask = Image.open(f"data/Kvasir-SEG-processed/train/masks/{input_name}.jpg")
         fig_original = px.imshow(img)
-        fig_original.update_layout( dragmode=drawmode, newshape=dict(line_color='cyan'), title="Original image",title_x=0.5)
-        # remove margins
-        fig_original.update_layout(height=400, width=400)#, margin=dict(l=0, r=0, b=0, t=0))
+        fig_original.update_layout( dragmode=drawmode, newshape=dict(line_color='cyan'), title="Original image",title_x=0.5, height=400, width=400)
+
         fig_target = px.imshow(mask)
-        fig_target.update_layout(coloraxis_showscale=False, title="Target",title_x=0.5)
-        fig_target.update_layout(height=400, width=400)#, margin=dict(l=0, r=0, b=0, t=0))
+        fig_target.update_layout(coloraxis_showscale=False, title="Target",title_x=0.5, height=400, width=400)
         # display option drawclosedpath, drawrect, drawline in the fig_original
         return fig_original, fig_target, input_name, None, dcc.Graph(figure=px.scatter(template="plotly_white",height=400, width=400)) #.show(config={'modeBarButtonsToAdd':['drawclosedpath','drawrect','eraseshape']})
     
@@ -159,7 +185,6 @@ def set_spinner(n_clicks, relayoutData):
             return [dbc.Alert("Please select an area", color="warning")]
         return [dbc.Spinner(color="primary", type="grow", size="lg")]
 
-# create callback that get the selected area and display it in the selection graph
 @callback(
     Output("output-mask-container", "children", allow_duplicate=True),
     Output("original-image", "relayoutData", allow_duplicate=True),
@@ -167,27 +192,41 @@ def set_spinner(n_clicks, relayoutData):
     State("original-image", "relayoutData"),
     State("input-name", "value"),
     State("output-mask-container", "children"),
+    State("radioitems-input-drawmode", "value"),
     prevent_initial_call=True,
 )
-def display_selection(n_clicks, relayoutData, image_name, actual_children):
+def predict(n_clicks, relayoutData, image_name, actual_children, drawmode):
     ctx = dash.callback_context
     if not ctx.triggered  or image_name not in images_names or relayoutData is None or "shapes" not in relayoutData:
         raise dash.exceptions.PreventUpdate
     else:
         if actual_children == [] or actual_children == None:
             return [dcc.Graph(figure=px.scatter(template="plotly_white",height=400, width=400))], None
-        x0 = int(relayoutData['shapes'][-1]["x0"])
-        x1 = int(relayoutData['shapes'][-1]["x1"])
-        y0 = int(relayoutData['shapes'][-1]["y0"])
-        y1 = int(relayoutData['shapes'][-1]["y1"])
-        box = [x0, y0, x1, y1]
-        # get the image and convert it to numpy array
+        
         img = np.array(Image.open(f"data/Kvasir-SEG-processed/train/images/{image_name}.jpg").convert("RGB"))
-
+        # get the image and convert it to numpy array
         image_predictor.set_image(img)
-        predicted_mask, _, _ = image_predictor.predict(box=box, multimask_output=False)
-        fig = px.imshow(predicted_mask[0])
-        # hide the colorbar
-        fig.update_layout(coloraxis_showscale=False, title="Predicted",title_x=0.5)
-        fig.update_layout(height=400, width=400)
-        return [dcc.Graph(figure=fig)], None
+        res = []
+        if drawmode == "drawrect":
+            x0 = int(relayoutData['shapes'][-1]["x0"])
+            x1 = int(relayoutData['shapes'][-1]["x1"])
+            y0 = int(relayoutData['shapes'][-1]["y0"])
+            y1 = int(relayoutData['shapes'][-1]["y1"])
+            box = [x0, y0, x1, y1]
+            predicted_mask, _, _ = image_predictor.predict(box=box, multimask_output=False)
+        elif drawmode == "drawclosedpath":
+            # create a mask from the closed path
+            mask = svg_path_to_mask(relayoutData['shapes'][-1]['path'], 128, 128)
+            mask_sam_fixed = np.zeros((1, 256, 256))  # Initialize the new array
+            mask_sam_fixed[0] = cv2.resize(mask, (256, 256), interpolation=cv2.INTER_LINEAR)
+            predicted_mask, _, _ = image_predictor.predict(mask_input= mask_sam_fixed, multimask_output=False)
+            selection_fig = px.imshow(mask_sam_fixed[0], color_continuous_scale="gray")
+            selection_fig.update_layout(coloraxis_showscale=False, title="Selection",title_x=0.5, height=120, width=120)
+            # modify dict margins
+            selection_fig.update_layout(margin=dict(l=0, r=0, b=0, t=25, pad=0))
+            res.append(dcc.Graph(figure=selection_fig))
+
+        fig = px.imshow(predicted_mask[0])#mask_sam_fixed[0])#
+        fig.update_layout(coloraxis_showscale=False, title="Predicted",title_x=0.5, height=400, width=400)
+        res.append(dcc.Graph(figure=fig))
+        return res, None
