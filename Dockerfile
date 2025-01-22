@@ -21,6 +21,7 @@ WORKDIR /app
 # Copy the source code into the container.
 COPY . .
 
+RUN    apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
 RUN    python3 -m pip install --upgrade pip
 RUN    python3 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 RUN    python3 -m pip install -r requirements.txt
