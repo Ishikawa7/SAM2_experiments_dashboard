@@ -110,10 +110,10 @@ def create_app_layout():
                                                             dcc.Graph(figure=px.scatter(template="plotly_white",height=400, width=400)),
                                                         ],
                                                         id = "output-mask-container",
-                                                        style={'justify-content': 'center', 'align-items': 'center', 'display': 'flex'},
+                                                        style={'justify-content': 'center', 'align-items': 'center', 'display': 'flex'},#
                                                     ),
                                                     width=4,
-                                                    style={'justify-content': 'center', 'align-items': 'center', 'display': 'flex'},
+                                                    style={'justify-content': 'center', 'align-items': 'center', 'display': 'flex'},#
                                                 ),
                                             ],
                                             # space between the columns 0
